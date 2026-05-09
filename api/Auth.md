@@ -296,11 +296,19 @@ Account is suspended.
 
 Allow an existing admin to invite a new admin by email.
 
+The backend generates a secure invitation token, revokes previous active invitations for the same email, stores the invitation record, and sends an invitation email containing a secure invitation link.
+
 ### Authentication
 
 Required.
 
 Role: `admin`
+
+Authentication method:
+
+- JWT
+- HttpOnly Cookie
+- CSRF protection required
 
 ### Request Body
 
@@ -323,12 +331,439 @@ Status: `201 Created`
 }
 ```
 
+### Error Responses
+
+#### 400 Bad Request
+
+```json
+{
+  "email": ["A valid email address is required."]
+}
+```
+
+#### 403 Forbidden
+
+```json
+{
+  "detail": "Only admins can send invitations."
+}
+```
+
+#### 409 Conflict
+
+```json
+{
+  "detail": "An active invitation already exists for this email."
+}
+```
+
+#### 409 Conflict
+
+```json
+{
+  "detail": "A user with this email already exists."
+}
+```
+
 ### Business Rules
 
 - Only existing admins can send admin invitations
+- Admin accounts cannot be created through normal registration
 - One email can have multiple invitation records over time
-- Only one active pending invitation is allowed per email
+- Only one active pending invitation is allowed per email at a time
 - Creating a new invitation revokes previous pending invitations for the same email
-- Invitation token is short-lived
-- Invitation token is sent by email and not returned in the API response
-- If the email already belongs to an existing user, the system should reject the invitation
+- Invitation tokens must be short-lived
+- Invitation tokens must not be returned in API responses
+- Invitation links are sent by email
+- Existing registered users cannot be invited again
+
+### Side Effects / Data Changes
+
+- Generate a secure invitation token
+- Revoke previous pending invitations for the same email
+- Create one record in `admin_invitations`
+- Send invitation email containing the invitation link
+
+## Validate Admin Invitation
+
+`POST /api/v1/admin/invitations/validate/`
+
+### Description
+
+Validate whether an admin invitation token is still valid before allowing the invited user to continue registration.
+
+### Authentication
+
+Not required.
+
+### Request Body
+
+```json
+{
+  "token": "secure-invitation-token"
+}
+```
+
+### Success Response
+
+Status: `200 OK`
+
+```json
+{
+  "email": "newadmin@example.com",
+  "status": "valid",
+  "expires_at": "2026-05-09T12:00:00Z"
+}
+```
+
+### Error Responses
+
+#### 400 Bad Request
+
+```json
+{
+  "detail": "Invalid or expired invitation token."
+}
+```
+
+### Business Rules
+
+- Token must exist
+- Token must not be expired
+- Token must not be revoked
+- Token must not already be accepted
+- Token must not already be rejected
+- If valid, frontend may display the admin onboarding form
+- Invitation email should be displayed but must not be editable
+
+## Validate Admin Invitation
+
+`POST /api/v1/admin/invitations/validate/`
+
+### Description
+
+Validate whether an admin invitation token is still valid before allowing the invited user to continue registration.
+
+### Authentication
+
+Not required.
+
+### Request Body
+
+```json
+{
+  "token": "secure-invitation-token"
+}
+```
+
+### Success Response
+
+Status: `200 OK`
+
+```json
+{
+  "email": "newadmin@example.com",
+  "status": "valid",
+  "expires_at": "2026-05-09T12:00:00Z"
+}
+```
+
+### Error Responses
+
+#### 400 Bad Request
+
+```json
+{
+  "detail": "Invalid or expired invitation token."
+}
+```
+
+### Business Rules
+
+- Token must exist
+- Token must not be expired
+- Token must not be revoked
+- Token must not already be accepted
+- Token must not already be rejected
+- If valid, frontend may display the admin onboarding form
+- Invitation email should be displayed but must not be editable
+
+## Accept Admin Invitation
+
+`POST /api/v1/admin/invitations/accept/`
+
+### Description
+
+Accept a valid admin invitation and create an active admin account.
+
+### Authentication
+
+Not required.
+
+### Request Body
+
+```json
+{
+  "token": "secure-invitation-token",
+  "password": "SecurePassword123!",
+  "display_name": "Eleana Guan"
+}
+```
+
+### Success Response
+
+Status: `201 Created`
+
+```json
+{
+  "user": {
+    "id": "uuid",
+    "email": "newadmin@example.com",
+    "role": "admin",
+    "status": "active",
+    "is_email_verified": true
+  }
+}
+```
+
+### Response Cookies
+
+```http
+Set-Cookie: access_token=<jwt-access-token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=900
+
+Set-Cookie: refresh_token=<jwt-refresh-token>; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth/refresh/; Max-Age=604800
+```
+
+### Error Responses
+
+#### 400 Bad Request
+
+```json
+{
+  "detail": "Invalid or expired invitation token."
+}
+```
+
+#### 400 Bad Request
+
+```json
+{
+  "password": ["Password does not meet security requirements."]
+}
+```
+
+#### 409 Conflict
+
+```json
+{
+  "detail": "A user with this email already exists."
+}
+```
+
+### Business Rules
+
+- Token must exist
+- Token must not be expired
+- Token must not be revoked
+- Token must not already be accepted
+- Invitation email determines the new admin account email
+- Invitation email cannot be changed during onboarding
+- Password must satisfy security requirements
+- Accepting an invitation immediately creates an active admin account
+- Invitation-based admin onboarding automatically treats the email as verified
+- Accepted invitations cannot be reused
+- JWT tokens are returned through secure HttpOnly cookies
+- CSRF protection is required
+
+### Side Effects / Data Changes
+
+- Create one record in `users`
+- Create one linked record in `profiles`
+- Set `admin_invitations.status` to `accepted`
+- Set `admin_invitations.accepted_at`
+- Set `admin_invitations.accepted_user_id`
+- Generate JWT access token
+- Generate JWT refresh token
+- Set secure HttpOnly authentication cookies
+
+## Reject Admin Invitation
+
+`POST /api/v1/admin/invitations/reject/`
+
+### Description
+
+Reject a valid admin invitation without creating an admin account.
+
+### Authentication
+
+Not required.
+
+### Request Body
+
+```json
+{
+  "token": "secure-invitation-token"
+}
+```
+
+### Success Response
+
+Status: `200 OK`
+
+```json
+{
+  "detail": "Invitation has been rejected."
+}
+```
+
+### Error Responses
+
+#### 400 Bad Request
+
+```json
+{
+  "detail": "Invalid or expired invitation token."
+}
+```
+
+### Business Rules
+
+- Token must exist
+- Token must not be expired
+- Token must not be revoked
+- Token must not already be accepted
+- Token must not already be rejected
+- Rejecting an invitation does not create a user account
+- Rejected invitations cannot be reused
+- A new invitation can be sent to the same email later
+
+### Side Effects / Data Changes
+
+- Set `admin_invitations.status` to `rejected`
+- Set `admin_invitations.rejected_at`
+
+````
+
+## Request Email Verification
+
+`POST /api/v1/auth/email-verification/request/`
+
+### Description
+
+Generate a short-lived email verification token and send a verification link to the current user's email address.
+
+### Authentication
+
+Required.
+
+Authentication method:
+
+- JWT
+- Secure HttpOnly Cookie
+- CSRF protection required
+
+### Request Body
+
+```json
+{}
+````
+
+### Success Response
+
+Status: `200 OK`
+
+```json
+{
+  "detail": "Verification email has been sent."
+}
+```
+
+### Error Responses
+
+#### 401 Unauthorized
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+#### 409 Conflict
+
+```json
+{
+  "detail": "Email is already verified."
+}
+```
+
+### Business Rules
+
+- Only logged-in users can request email verification
+- Only users with `is_email_verified=false` can request verification
+- Token must be short-lived
+- Creating a new verification token revokes previous unused verification tokens for the same user
+- Verification token must not be returned in the API response
+- Verification link is sent by email
+
+### Side Effects / Data Changes
+
+- Generate a secure email verification token
+- Revoke previous unused verification tokens for the same user
+- Create one record in `email_verification_tokens`
+- Send verification email containing the verification link
+
+## Confirm Email Verification
+
+`POST /api/v1/auth/email-verification/confirm/`
+
+### Description
+
+Verify the user's email address using a valid email verification token.
+
+### Authentication
+
+Not required.
+
+### Request Body
+
+```json
+{
+  "token": "secure-email-verification-token"
+}
+```
+
+### Success Response
+
+Status: `200 OK`
+
+```json
+{
+  "detail": "Email has been verified successfully."
+}
+```
+
+### Error Responses
+
+#### 400 Bad Request
+
+```json
+{
+  "detail": "Invalid or expired email verification token."
+}
+```
+
+### Business Rules
+
+- Token must exist
+- Token must not be expired
+- Token must not be revoked
+- Token must not already be used
+- Once verified, the user account becomes active
+- Used verification tokens cannot be reused
+
+### Side Effects / Data Changes
+
+- Set `users.is_email_verified` to `true`
+- Set `users.status` to `active`
+- Set `email_verification_tokens.used_at`
+- Revoke other unused email verification tokens for the same user

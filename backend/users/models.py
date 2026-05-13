@@ -16,7 +16,7 @@ class UserRole(models.TextChoices):
 
 
 class UserStatus(models.TextChoices):
-    PENDING_VERIFICATION = "pending_verification", "Pending verification"
+    EMAIL_UNVERIFIED = "email_unverified", "Email unverified"
     ACTIVE = "active", "Active"
     SUSPENDED = "suspended", "Suspended"
     DELETED = "deleted", "Deleted"
@@ -81,7 +81,7 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    email = models.EmailField(max_length=254, verbose_name="email address",unique=True)
+    email = models.EmailField(max_length=254, verbose_name="email address", unique=True)
     email_normalized = models.CharField(max_length=254, editable=False, db_index=True)
     google_id = models.CharField(max_length=255, null=True, blank=True)
 
@@ -93,7 +93,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     status = models.CharField(
         max_length=32,
         choices=UserStatus.choices,
-        default=UserStatus.PENDING_VERIFICATION,
+        default=UserStatus.EMAIL_UNVERIFIED,
     )
     is_email_verified = models.BooleanField(default=False)
 
@@ -132,7 +132,7 @@ class User(AbstractBaseUser, PermissionsMixin):
             models.CheckConstraint(
                 condition=~models.Q(
                     is_email_verified=True,
-                    status=UserStatus.PENDING_VERIFICATION,
+                    status=UserStatus.EMAIL_UNVERIFIED,
                 ),
                 name="users_user_email_verified_status_consistency",
             ),

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from django.db import transaction
 
-from users.models import User, UserRole, UserStatus
+from users.models import Profile, User, UserRole, UserStatus
 
 
 class PublicRegistrationError(ValueError):
@@ -28,24 +28,33 @@ def validate_public_registration_role(role: str) -> None:
 
 
 @transaction.atomic
-def register_with_email_password(
+def register_email_password_user(
     *,
     email: str,
     password: str,
-    role: str = UserRole.TENANT,
+    role: str,
+    name: str,
 ) -> User:
     """
-    Email/password signup. User starts unverified until email flow completes.
+    Create User + Profile in one transaction. Name is stored on Profile.display_name only.
     """
     validate_public_registration_role(role)
+    email_norm = normalize_email(email)
     user = User.objects.create_user(
-        email=normalize_email(email),
+        email=email_norm,
         password=password,
         role=role,
-        status=UserStatus.PENDING_VERIFICATION,
+        status=UserStatus.EMAIL_UNVERIFIED,
         is_email_verified=False,
     )
-    return user
+    Profile.objects.update_or_create(
+        user=user,
+        defaults={"display_name": name.strip()},
+    )
+    return User.objects.select_related("profile").get(pk=user.pk)
+
+
+
 
 
 @transaction.atomic
@@ -77,7 +86,7 @@ def google_login_or_link(
         existing.google_id = google_id
         if email_verified_by_provider:
             existing.is_email_verified = True
-            if existing.status == UserStatus.PENDING_VERIFICATION:
+            if existing.status == UserStatus.EMAIL_UNVERIFIED:
                 existing.status = UserStatus.ACTIVE
         existing.save()
         return existing
@@ -88,7 +97,7 @@ def google_login_or_link(
         password=None,
         google_id=google_id,
         role=role,
-        status=UserStatus.ACTIVE if email_verified_by_provider else UserStatus.PENDING_VERIFICATION,
+        status=UserStatus.ACTIVE if email_verified_by_provider else UserStatus.EMAIL_UNVERIFIED,
         is_email_verified=email_verified_by_provider,
     )
     return user

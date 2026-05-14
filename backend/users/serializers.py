@@ -3,8 +3,9 @@ from __future__ import annotations
 from django.contrib.auth import password_validation
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
+from django.contrib.auth import authenticate
 
-from users.models import User, UserRole
+from users.models import User, UserRole, UserStatus
 from users.services import normalize_email
 
 
@@ -49,5 +50,52 @@ class UserRegistrationResponseSerializer(serializers.ModelSerializer):
             "is_email_verified",
             "name",
             "created_at",
+        )
+        read_only_fields = fields
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=254)
+    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+
+    def validate(self, attrs):
+        email = attrs.get("email")
+        password = attrs.get("password")
+        
+        normalized_email = normalize_email(email)
+        
+        try:
+            user = User.objects.get(email_normalized=normalized_email)
+        except User.DoesNotExist:
+            raise serializers.ValidationError(
+                {"detail": "Invalid email or password."}
+            )
+        
+        if user.status == UserStatus.SUSPENDED:
+            raise serializers.ValidationError(
+                {"detail": "This account has been suspended."}
+            )
+        
+        user = authenticate(email=user.email, password=password)
+        if not user:
+            raise serializers.ValidationError(
+                {"detail": "Invalid email or password."}
+            )
+        
+        attrs["user"] = user
+        return attrs
+
+
+class LoginResponseSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source="profile.display_name", read_only=True)
+
+    class Meta:
+        model = User
+        fields = (
+            "id",
+            "email",
+            "role",
+            "status",
+            "is_email_verified",
+            "name",
         )
         read_only_fields = fields

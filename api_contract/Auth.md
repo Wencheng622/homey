@@ -130,9 +130,6 @@ Status: `200 OK`
 - Revoke previous unused reset tokens for the same user
 - Send password reset email
 
-````
-
-
 ## Confirm Password Reset
 
 `POST /api/v1/auth/password-reset/confirm/`
@@ -201,8 +198,6 @@ Weak password.
 - Update `users.password_hash`
 - Set `password_reset_tokens.used_at`
 - Revoke other unused reset tokens for the same user
-
-````
 
 ## Login User
 
@@ -436,58 +431,6 @@ Status: `200 OK`
 - If valid, frontend may display the admin onboarding form
 - Invitation email should be displayed but must not be editable
 
-## Validate Admin Invitation
-
-`POST /api/v1/admin/invitations/validate/`
-
-### Description
-
-Validate whether an admin invitation token is still valid before allowing the invited user to continue registration.
-
-### Authentication
-
-Not required.
-
-### Request Body
-
-```json
-{
-  "token": "secure-invitation-token"
-}
-```
-
-### Success Response
-
-Status: `200 OK`
-
-```json
-{
-  "email": "newadmin@example.com",
-  "status": "valid",
-  "expires_at": "2026-05-09T12:00:00Z"
-}
-```
-
-### Error Responses
-
-#### 400 Bad Request
-
-```json
-{
-  "detail": "Invalid or expired invitation token."
-}
-```
-
-### Business Rules
-
-- Token must exist
-- Token must not be expired
-- Token must not be revoked
-- Token must not already be accepted
-- Token must not already be rejected
-- If valid, frontend may display the admin onboarding form
-- Invitation email should be displayed but must not be editable
-
 ## Accept Admin Invitation
 
 `POST /api/v1/admin/invitations/accept/`
@@ -641,8 +584,6 @@ Status: `200 OK`
 
 - Set `admin_invitations.status` to `rejected`
 - Set `admin_invitations.rejected_at`
-
-````
 
 ## Request Email Verification
 

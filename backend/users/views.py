@@ -7,7 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -19,13 +19,18 @@ from users.serializers import (
     LoginResponseSerializer,
     GoogleRegisterSerializer,
     GoogleRegisterResponseSerializer,
+    GoogleLoginSerializer,
 )
 from users.services import (
     register_email_password_user,
     verify_google_id_token,
     register_google_user,
+    login_google_user,
     GoogleTokenVerificationError,
     GoogleRegistrationConflictError,
+    GoogleLoginNotFoundError,
+    GoogleLoginConflictError,
+    GoogleLoginSuspendedError,
 )
 
 
@@ -155,3 +160,54 @@ class GoogleRegisterView(APIView):
 
         out = GoogleRegisterResponseSerializer(user)
         return Response(out.data, status=status.HTTP_201_CREATED)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class GoogleLoginView(APIView):
+    """
+    CSRF exempt: JSON API Google login (consistent with LoginView).
+    Establishes a Django session; does not create new users.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    @extend_schema(
+        request=GoogleLoginSerializer,
+        responses={200: LoginResponseSerializer},
+        summary="google login",
+        description=(
+            "Log in with a Google ID token. Returns user JSON and sets an HttpOnly "
+            "session cookie (24-hour expiry per SESSION_COOKIE_AGE). "
+            "Account must already exist (use google register first)."
+        ),
+    )
+    def post(self, request, *args, **kwargs):
+        serializer = GoogleLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            claims = verify_google_id_token(serializer.validated_data["id_token"])
+        except GoogleTokenVerificationError:
+            raise ValidationError(
+                {"id_token": ["Invalid or expired Google ID token."]},
+            ) from None
+
+        try:
+            user = login_google_user(
+                google_id=claims["google_id"],
+                email=claims["email"],
+                name=claims["name"],
+                picture=claims["picture"],
+                email_verified=claims["email_verified"],
+            )
+        except GoogleLoginNotFoundError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_401_UNAUTHORIZED)
+        except GoogleLoginConflictError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        except GoogleLoginSuspendedError as exc:
+            raise PermissionDenied(detail=str(exc))
+
+        login(request, user)
+
+        out = LoginResponseSerializer(user)
+        return Response(out.data, status=status.HTTP_200_OK)

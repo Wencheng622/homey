@@ -101,6 +101,10 @@ class LoginResponseSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class GoogleLoginSerializer(serializers.Serializer):
+    id_token = serializers.CharField()
+
+
 class GoogleRegisterSerializer(serializers.Serializer):
     id_token = serializers.CharField()
     role = serializers.CharField(max_length=32)

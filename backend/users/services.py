@@ -25,6 +25,18 @@ class GoogleRegistrationConflictError(ValueError):
     """Raised when email is already linked to a Google account."""
 
 
+class GoogleLoginNotFoundError(ValueError):
+    """Raised when no user exists for this Google identity (register first)."""
+
+
+class GoogleLoginConflictError(ValueError):
+    """Raised when email is linked to a different Google account."""
+
+
+class GoogleLoginSuspendedError(ValueError):
+    """Raised when the matched account is suspended."""
+
+
 class GoogleTokenClaims(TypedDict):
     google_id: str
     email: str
@@ -161,6 +173,54 @@ def register_google_user(
             status=UserStatus.ACTIVE if email_verified else UserStatus.EMAIL_UNVERIFIED,
             is_email_verified=email_verified,
         )
+
+    _update_profile_from_google(user, name=name, picture=picture)
+    return User.objects.select_related("profile").get(pk=user.pk)
+
+
+@transaction.atomic
+def login_google_user(
+    *,
+    google_id: str,
+    email: str,
+    name: str,
+    picture: str,
+    email_verified: bool,
+) -> User:
+    """
+    Log in an existing user via verified Google claims. Does not create users.
+
+    - Match by google_id first, then by email (link if google_id empty).
+    - Reject if email is linked to a different google_id.
+    """
+    if not google_id:
+        raise ValueError("google_id is required")
+
+    email_norm = normalize_email(email)
+    user = User.objects.filter(google_id=google_id).select_related("profile").first()
+
+    if user:
+        if user.email_normalized != email_norm:
+            raise GoogleLoginConflictError(
+                "This Google account does not match the email on file."
+            )
+    else:
+        user = User.objects.filter(email_normalized=email_norm).select_related("profile").first()
+        if not user:
+            raise GoogleLoginNotFoundError(
+                "No account found for this Google identity. Please register first."
+            )
+        if user.google_id and user.google_id != google_id:
+            raise GoogleLoginConflictError(
+                "This email is already linked to a different Google account."
+            )
+        if not user.google_id:
+            user.google_id = google_id
+            _apply_email_verified_from_google(user, email_verified=email_verified)
+            user.save()
+
+    if user.status == UserStatus.SUSPENDED:
+        raise GoogleLoginSuspendedError("This account has been suspended.")
 
     _update_profile_from_google(user, name=name, picture=picture)
     return User.objects.select_related("profile").get(pk=user.pk)

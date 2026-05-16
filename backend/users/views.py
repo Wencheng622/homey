@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from django.contrib.auth import login, logout
 from django.db import IntegrityError
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from drf_spectacular.utils import extend_schema
 
 from users.serializers import (
     RegisterSerializer,
@@ -25,7 +29,12 @@ from users.services import (
 )
 
 
+@method_decorator(csrf_exempt, name="dispatch")
 class RegisterView(APIView):
+    """
+    CSRF exempt: JSON API signup without browser CSRF token round-trip.
+    Rate-limit in production if exposed publicly.
+    """
     permission_classes = [AllowAny]
     authentication_classes = []
 
@@ -53,8 +62,14 @@ class RegisterView(APIView):
             ) from None
         out = UserRegistrationResponseSerializer(user)
         return Response(out.data, status=status.HTTP_201_CREATED)
-    
+
+
+@method_decorator(csrf_exempt, name="dispatch")
 class LoginView(APIView):
+    """
+    CSRF exempt: JSON API login without CSRF cookie/header (consistent with RegisterView).
+    Establishes a Django session (sessionid cookie, HttpOnly, Secure per settings).
+    """
     permission_classes = [AllowAny]
     authentication_classes = []
 
@@ -62,16 +77,39 @@ class LoginView(APIView):
         request=LoginSerializer,
         responses={200: LoginResponseSerializer},
         summary="login",
-        description="Log in with email and password to retrieve user information."
+        description=(
+            "Log in with email and password. Returns user JSON and sets an HttpOnly "
+            "session cookie (24-hour expiry per SESSION_COOKIE_AGE)."
+        ),
     )
-
     def post(self, request, *args, **kwargs):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data["user"]
-        
+
+        login(request, user)
+
         out = LoginResponseSerializer(user)
         return Response(out.data, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class LogoutView(APIView):
+    """
+    CSRF exempt: session-authenticated JSON logout without CSRF header on POST.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication]
+
+    @extend_schema(
+        request=None,
+        responses={204: None},
+        summary="logout",
+        description="End the current session and clear the session cookie.",
+    )
+    def post(self, request, *args, **kwargs):
+        logout(request)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class GoogleRegisterView(APIView):

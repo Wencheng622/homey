@@ -48,7 +48,10 @@ INSTALLED_APPS = [
 ]
 
 REST_FRAMEWORK = {
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework.authentication.SessionAuthentication",
+    ),
 }
 
 SPECTACULAR_SETTINGS = {
@@ -61,6 +64,16 @@ SPECTACULAR_SETTINGS = {
 AUTH_USER_MODEL = "users.User"
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+
+# Session cookie (login uses django.contrib.auth.login)
+SESSION_COOKIE_AGE = 86400  # 24 hours
+SESSION_COOKIE_HTTPONLY = True
+_SESSION_COOKIE_SECURE_ENV = os.getenv("SESSION_COOKIE_SECURE")
+if _SESSION_COOKIE_SECURE_ENV is not None:
+    SESSION_COOKIE_SECURE = _SESSION_COOKIE_SECURE_ENV.lower() in ("1", "true", "yes")
+else:
+    SESSION_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "Lax")
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

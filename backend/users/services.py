@@ -1,18 +1,36 @@
 """
 Public auth registration and Google account linking.
-
-Token verification against Google is out of scope here; callers must verify
-the ID token server-side before invoking `google_login_or_link`.
 """
 from __future__ import annotations
 
+from typing import Any, TypedDict
+
+from django.conf import settings
 from django.db import transaction
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
 
 from users.models import Profile, User, UserRole, UserStatus
 
 
 class PublicRegistrationError(ValueError):
     """Raised when public signup rules are violated."""
+
+
+class GoogleTokenVerificationError(ValueError):
+    """Raised when Google ID token verification fails."""
+
+
+class GoogleRegistrationConflictError(ValueError):
+    """Raised when email is already linked to a Google account."""
+
+
+class GoogleTokenClaims(TypedDict):
+    google_id: str
+    email: str
+    name: str
+    picture: str
+    email_verified: bool
 
 
 def normalize_email(email: str) -> str:
@@ -25,6 +43,53 @@ def validate_public_registration_role(role: str) -> None:
         raise PublicRegistrationError(
             "Only tenant or landlord may register through public signup."
         )
+
+
+def verify_google_id_token(id_token_str: str) -> GoogleTokenClaims:
+    """Verify Google ID token and return normalized identity claims."""
+    try:
+        idinfo: dict[str, Any] = id_token.verify_oauth2_token(
+            id_token_str,
+            google_requests.Request(),
+            settings.GOOGLE_CLIENT_ID,
+        )
+    except (ValueError, Exception) as exc:
+        raise GoogleTokenVerificationError("Invalid or expired Google ID token.") from exc
+
+    google_sub = idinfo.get("sub")
+    email = idinfo.get("email")
+    if not google_sub or not email:
+        raise GoogleTokenVerificationError("Invalid or expired Google ID token.")
+
+    return GoogleTokenClaims(
+        google_id=str(google_sub),
+        email=str(email),
+        name=str(idinfo.get("name") or ""),
+        picture=str(idinfo.get("picture") or ""),
+        email_verified=bool(idinfo.get("email_verified", False)),
+    )
+
+
+def _update_profile_from_google(
+    user: User,
+    *,
+    name: str,
+    picture: str,
+) -> None:
+    Profile.objects.update_or_create(
+        user=user,
+        defaults={
+            "display_name": name.strip(),
+            "avatar_url": picture,
+        },
+    )
+
+
+def _apply_email_verified_from_google(user: User, *, email_verified: bool) -> None:
+    if email_verified:
+        user.is_email_verified = True
+        if user.status == UserStatus.EMAIL_UNVERIFIED:
+            user.status = UserStatus.ACTIVE
 
 
 @transaction.atomic
@@ -54,7 +119,51 @@ def register_email_password_user(
     return User.objects.select_related("profile").get(pk=user.pk)
 
 
+@transaction.atomic
+def register_google_user(
+    *,
+    google_id: str,
+    email: str,
+    name: str,
+    picture: str,
+    email_verified: bool,
+    role: str,
+) -> User:
+    """
+    Register or link a user via Google ID token claims (token must be verified first).
 
+    - New email: create user with role from request, unusable password, google_id set.
+    - Existing email without google_id: link google_id; do not change role.
+    - Existing email with google_id: raise GoogleRegistrationConflictError.
+    """
+    if not google_id:
+        raise ValueError("google_id is required")
+
+    email_norm = normalize_email(email)
+    existing = User.objects.filter(email_normalized=email_norm).first()
+
+    if existing:
+        if existing.google_id:
+            raise GoogleRegistrationConflictError(
+                "This email is already registered with Google."
+            )
+        existing.google_id = google_id
+        _apply_email_verified_from_google(existing, email_verified=email_verified)
+        existing.save()
+        user = existing
+    else:
+        validate_public_registration_role(role)
+        user = User.objects.create_user(
+            email=email_norm,
+            password=None,
+            google_id=google_id,
+            role=role,
+            status=UserStatus.ACTIVE if email_verified else UserStatus.EMAIL_UNVERIFIED,
+            is_email_verified=email_verified,
+        )
+
+    _update_profile_from_google(user, name=name, picture=picture)
+    return User.objects.select_related("profile").get(pk=user.pk)
 
 
 @transaction.atomic

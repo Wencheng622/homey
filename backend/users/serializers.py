@@ -99,3 +99,27 @@ class LoginResponseSerializer(serializers.ModelSerializer):
             "name",
         )
         read_only_fields = fields
+
+
+class GoogleRegisterSerializer(serializers.Serializer):
+    id_token = serializers.CharField()
+    role = serializers.CharField(max_length=32)
+
+    def validate_role(self, value: str) -> str:
+        role = value.strip()
+        if role == UserRole.ADMIN:
+            raise PermissionDenied(detail="Admin accounts cannot be self-registered.")
+        if role not in (UserRole.TENANT, UserRole.LANDLORD):
+            raise serializers.ValidationError("Role must be tenant or landlord.")
+        return role
+
+
+class GoogleRegisterResponseSerializer(UserRegistrationResponseSerializer):
+    message = serializers.SerializerMethodField()
+
+    class Meta(UserRegistrationResponseSerializer.Meta):
+        fields = UserRegistrationResponseSerializer.Meta.fields + ("message",)
+        read_only_fields = fields
+
+    def get_message(self, obj: User) -> str:
+        return "Registration successful. Please log in."

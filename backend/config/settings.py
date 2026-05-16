@@ -60,6 +60,8 @@ SPECTACULAR_SETTINGS = {
 
 AUTH_USER_MODEL = "users.User"
 
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",

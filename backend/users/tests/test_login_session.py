@@ -34,7 +34,7 @@ class LoginSessionCookieTests(TestCase):
 
         cookie = response.cookies.get(self._session_cookie_name())
         self.assertIsNotNone(cookie)
-        self.assertEqual(cookie["max-age"], str(settings.SESSION_COOKIE_AGE))
+        self.assertEqual(cookie["max-age"], settings.SESSION_COOKIE_AGE)
         output_lower = cookie.output().lower()
         self.assertIn("httponly", output_lower)
 

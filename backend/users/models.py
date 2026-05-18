@@ -156,6 +156,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self) -> str:
         return self.email
 
+    def _sync_email_verified_with_status(self) -> None:
+        if self.status == UserStatus.ACTIVE:
+            self.is_email_verified = True
+        elif self.status == UserStatus.EMAIL_UNVERIFIED:
+            self.is_email_verified = False
+
     def clean(self) -> None:
         super().clean()
         if self.email:
@@ -164,6 +170,7 @@ class User(AbstractBaseUser, PermissionsMixin):
             self.email_normalized = ""
         if self.google_id == "":
             self.google_id = None
+        self._sync_email_verified_with_status()
 
     def save(self, *args, **kwargs) -> None:
         # Keep normalized email in sync for constraints and lookups
@@ -173,6 +180,7 @@ class User(AbstractBaseUser, PermissionsMixin):
             self.email_normalized = ""
         if self.google_id == "":
             self.google_id = None
+        self._sync_email_verified_with_status()
         super().save(*args, **kwargs)
 
     def soft_delete(self) -> None:

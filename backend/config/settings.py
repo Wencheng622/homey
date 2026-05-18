@@ -65,6 +65,10 @@ AUTH_USER_MODEL = "users.User"
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
+ADMIN_INVITATION_EXPIRY_SECONDS = int(
+    os.getenv("ADMIN_INVITATION_EXPIRY_SECONDS", str(7 * 24 * 60 * 60)),
+)
+
 # Session cookie (login uses django.contrib.auth.login)
 SESSION_COOKIE_AGE = 86400  # 24 hours
 SESSION_COOKIE_HTTPONLY = True

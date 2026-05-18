@@ -5,7 +5,7 @@ __pycache__/
 *.pyc
 
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -18,7 +18,7 @@ __pycache__/
 /coverage
 
 # next.js
-/.next/
+.next/
 /out/
 
 # production
@@ -43,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+

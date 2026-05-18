@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import secrets
 import uuid
+from datetime import datetime, timedelta
 
+from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
+
+from users.exceptions import InvalidInvitationTransition
 
 
 class UserRole(models.TextChoices):
@@ -20,6 +25,18 @@ class UserStatus(models.TextChoices):
     ACTIVE = "active", "Active"
     SUSPENDED = "suspended", "Suspended"
     DELETED = "deleted", "Deleted"
+
+
+class AdminInvitationStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    ACCEPTED = "accepted", "Accepted"
+    REJECTED = "rejected", "Rejected"
+    EXPIRED = "expired", "Expired"
+    REVOKED = "revoked", "Revoked"
+
+
+def generate_invitation_token() -> str:
+    return secrets.token_urlsafe(32)
 
 
 class UserQuerySet(models.QuerySet):
@@ -211,3 +228,142 @@ class Profile(models.Model):
 
     def __str__(self) -> str:
         return f"Profile({self.user_id})"
+
+
+class AdminInvitation(models.Model):
+    """
+    Admin invite lifecycle. Does not create a User until acceptance.
+
+    Creation (service layer): normalize email, reject if User exists, revoke pending
+    rows for the email, then insert with expires_at from settings.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(max_length=254)
+    email_normalized = models.CharField(max_length=254, editable=False, db_index=True)
+    token = models.CharField(
+        max_length=64,
+        unique=True,
+        editable=False,
+        default=generate_invitation_token,
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=AdminInvitationStatus.choices,
+        default=AdminInvitationStatus.PENDING,
+        db_index=True,
+    )
+    created_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.PROTECT,
+        related_name="admin_invitations_created",
+    )
+    accepted_user = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="admin_invitations_accepted",
+    )
+    expires_at = models.DateTimeField()
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "admin_invitations"
+        verbose_name = "admin invitation"
+        verbose_name_plural = "admin invitations"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=[c.value for c in AdminInvitationStatus]),
+                name="users_admininvitation_status_valid",
+            ),
+            models.UniqueConstraint(
+                fields=["email_normalized"],
+                condition=Q(status=AdminInvitationStatus.PENDING),
+                name="users_admininvitation_one_pending_per_email",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["email"]),
+            models.Index(fields=["email_normalized"]),
+            models.Index(fields=["token"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["created_by"]),
+            models.Index(fields=["accepted_user"]),
+            models.Index(fields=["email_normalized", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"AdminInvitation({self.email}, {self.status})"
+
+    @classmethod
+    def default_expires_at(cls) -> datetime:
+        return timezone.now() + timedelta(seconds=settings.ADMIN_INVITATION_EXPIRY_SECONDS)
+
+    def _sync_normalized_email(self) -> None:
+        from users.services import normalize_email
+
+        if self.email:
+            self.email_normalized = normalize_email(self.email)
+            self.email = self.email_normalized
+        else:
+            self.email_normalized = ""
+
+    def clean(self) -> None:
+        super().clean()
+        self._sync_normalized_email()
+
+    def save(self, *args, **kwargs) -> None:
+        self._sync_normalized_email()
+        super().save(*args, **kwargs)
+
+    def is_expired(self) -> bool:
+        return timezone.now() >= self.expires_at
+
+    def is_valid(self) -> bool:
+        return self.status == AdminInvitationStatus.PENDING and not self.is_expired()
+
+    def _require_pending_transition(self) -> None:
+        if self.status != AdminInvitationStatus.PENDING:
+            raise InvalidInvitationTransition(
+                f"Cannot transition invitation from status '{self.status}'."
+            )
+        if self.is_expired():
+            raise InvalidInvitationTransition("Invitation has expired.")
+
+    def mark_accepted(self, user: User) -> None:
+        self._require_pending_transition()
+        now = timezone.now()
+        self.status = AdminInvitationStatus.ACCEPTED
+        self.accepted_user = user
+        self.accepted_at = now
+        self.save(
+            update_fields=["status", "accepted_user", "accepted_at", "updated_at"],
+        )
+
+    def mark_rejected(self) -> None:
+        self._require_pending_transition()
+        now = timezone.now()
+        self.status = AdminInvitationStatus.REJECTED
+        self.rejected_at = now
+        self.save(update_fields=["status", "rejected_at", "updated_at"])
+
+    def mark_revoked(self) -> None:
+        self._require_pending_transition()
+        now = timezone.now()
+        self.status = AdminInvitationStatus.REVOKED
+        self.revoked_at = now
+        self.save(update_fields=["status", "revoked_at", "updated_at"])
+
+    def mark_expired(self) -> None:
+        if self.status != AdminInvitationStatus.PENDING:
+            raise InvalidInvitationTransition(
+                f"Cannot expire invitation from status '{self.status}'."
+            )
+        now = timezone.now()
+        self.status = AdminInvitationStatus.EXPIRED
+        self.save(update_fields=["status", "updated_at"])

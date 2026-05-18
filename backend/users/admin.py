@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.utils.translation import gettext_lazy as _
 
-from users.models import Profile, User
+from users.models import AdminInvitation, Profile, User
 
 
 @admin.register(User)
@@ -51,3 +51,21 @@ class ProfileAdmin(admin.ModelAdmin):
     list_display = ("id", "user", "display_name", "locale", "created_at")
     search_fields = ("user__email", "display_name", "phone_number")
     raw_id_fields = ("user",)
+
+
+@admin.register(AdminInvitation)
+class AdminInvitationAdmin(admin.ModelAdmin):
+    list_display = ("email", "status", "created_by", "expires_at", "created_at")
+    list_filter = ("status",)
+    search_fields = ("email", "email_normalized", "token")
+    raw_id_fields = ("created_by", "accepted_user")
+    readonly_fields = (
+        "id",
+        "token",
+        "email_normalized",
+        "created_at",
+        "updated_at",
+        "accepted_at",
+        "rejected_at",
+        "revoked_at",
+    )

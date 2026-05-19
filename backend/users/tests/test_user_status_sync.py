@@ -23,7 +23,7 @@ class UserStatusEmailVerifiedSyncTests(TestCase):
             is_email_verified=False,
         )
         user.status = UserStatus.ACTIVE
-        user.save(update_fields=["status", "updated_at"])
+        user.save(update_fields=["status", "updated_at","is_email_verified"])
         user.refresh_from_db()
         self.assertTrue(user.is_email_verified)
 

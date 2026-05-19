@@ -68,6 +68,16 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 ADMIN_INVITATION_EXPIRY_SECONDS = int(
     os.getenv("ADMIN_INVITATION_EXPIRY_SECONDS", str(7 * 24 * 60 * 60)),
 )
+ADMIN_INVITATION_FRONTEND_URL = os.getenv(
+    "ADMIN_INVITATION_FRONTEND_URL",
+    "http://localhost:3000/admin/invite",
+)
+
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@homey.local")
 
 # Session cookie (login uses django.contrib.auth.login)
 SESSION_COOKIE_AGE = 86400  # 24 hours

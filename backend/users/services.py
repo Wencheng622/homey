@@ -7,10 +7,20 @@ from typing import Any, TypedDict
 
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 
-from users.models import Profile, User, UserRole, UserStatus
+from users.emails import send_admin_invitation_email
+from users.exceptions import AdminInvitationUserExistsError
+from users.models import (
+    AdminInvitation,
+    AdminInvitationStatus,
+    Profile,
+    User,
+    UserRole,
+    UserStatus,
+)
 
 
 class PublicRegistrationError(ValueError):
@@ -270,3 +280,33 @@ def google_login_or_link(
         is_email_verified=email_verified_by_provider,
     )
     return user
+
+
+@transaction.atomic
+def create_admin_invitation(*, email: str, created_by: User) -> AdminInvitation:
+    """
+    Create a pending admin invitation and send the invitation email.
+
+    Revokes any existing pending invitations for the same normalized email.
+    Raises AdminInvitationUserExistsError if a user account already exists.
+    """
+    email_norm = normalize_email(email)
+    if User.objects.filter(email_normalized=email_norm).exists():
+        raise AdminInvitationUserExistsError("A user with this email already exists.")
+
+    now = timezone.now()
+    AdminInvitation.objects.filter(
+        email_normalized=email_norm,
+        status=AdminInvitationStatus.PENDING,
+    ).update(
+        status=AdminInvitationStatus.REVOKED,
+        revoked_at=now,
+    )
+
+    invitation = AdminInvitation.objects.create(
+        email=email_norm,
+        created_by=created_by,
+        expires_at=AdminInvitation.default_expires_at(),
+    )
+    send_admin_invitation_email(invitation)
+    return invitation

@@ -5,7 +5,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from django.contrib.auth import authenticate
 
-from users.models import User, UserRole, UserStatus
+from users.models import AdminInvitation, User, UserRole, UserStatus
 from users.services import normalize_email
 
 
@@ -127,3 +127,19 @@ class GoogleRegisterResponseSerializer(UserRegistrationResponseSerializer):
 
     def get_message(self, obj: User) -> str:
         return "Registration successful. Please log in."
+
+
+class AdminInvitationCreateSerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=254)
+
+    def validate_email(self, value: str) -> str:
+        if not value or not value.strip():
+            raise serializers.ValidationError("A valid email address is required.")
+        return normalize_email(value)
+
+
+class AdminInvitationResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AdminInvitation
+        fields = ("id", "email", "status", "expires_at")
+        read_only_fields = fields

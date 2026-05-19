@@ -12,7 +12,11 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from users.exceptions import AdminInvitationUserExistsError
+from users.permissions import IsAdminRole
 from users.serializers import (
+    AdminInvitationCreateSerializer,
+    AdminInvitationResponseSerializer,
     RegisterSerializer,
     UserRegistrationResponseSerializer,
     LoginSerializer,
@@ -22,6 +26,7 @@ from users.serializers import (
     GoogleLoginSerializer,
 )
 from users.services import (
+    create_admin_invitation,
     register_email_password_user,
     verify_google_id_token,
     register_google_user,
@@ -211,3 +216,40 @@ class GoogleLoginView(APIView):
 
         out = LoginResponseSerializer(user)
         return Response(out.data, status=status.HTTP_200_OK)
+
+
+class AdminInvitationCreateView(APIView):
+    """
+    Session-authenticated admin endpoint. CSRF required (not csrf_exempt).
+    """
+
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminRole]
+
+    @extend_schema(
+        request=AdminInvitationCreateSerializer,
+        responses={201: AdminInvitationResponseSerializer},
+        summary="send admin invitation",
+        description=(
+            "Invite a new admin by email. Revokes prior pending invitations for "
+            "the same email and sends an invitation link by email."
+        ),
+    )
+    def post(self, request, *args, **kwargs):
+        serializer = AdminInvitationCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            invitation = create_admin_invitation(
+                email=serializer.validated_data["email"],
+                created_by=request.user,
+            )
+        except AdminInvitationUserExistsError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        except IntegrityError:
+            return Response(
+                {"detail": "Could not create invitation due to a conflict. Please retry."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        out = AdminInvitationResponseSerializer(invitation)
+        return Response(out.data, status=status.HTTP_201_CREATED)

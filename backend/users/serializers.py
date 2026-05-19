@@ -118,6 +118,37 @@ class GoogleRegisterSerializer(serializers.Serializer):
         return role
 
 
+class PasswordResetSerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=254)
+    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+    password_confirm = serializers.CharField(write_only=True, style={"input_type": "password"})
+
+    def validate_email(self, value: str) -> str:
+        normalized = normalize_email(value)
+        if not User.objects.filter(email_normalized=normalized).exists():
+            raise serializers.ValidationError("No account found with this email address.")
+        return normalized
+
+    def validate_password(self, value: str) -> str:
+        try:
+            password_validation.validate_password(value, user=None)
+        except password_validation.ValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value
+
+    def validate(self, attrs):
+        if attrs["password"] != attrs["password_confirm"]:
+            raise serializers.ValidationError(
+                {"password_confirm": ["Passwords do not match."]}
+            )
+        return attrs
+
+
+class PasswordResetResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+    email = serializers.EmailField()
+
+
 class GoogleRegisterResponseSerializer(UserRegistrationResponseSerializer):
     message = serializers.SerializerMethodField()
 

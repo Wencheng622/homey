@@ -12,6 +12,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from users.models import User
 from users.serializers import (
     RegisterSerializer,
     UserRegistrationResponseSerializer,
@@ -20,9 +21,12 @@ from users.serializers import (
     GoogleRegisterSerializer,
     GoogleRegisterResponseSerializer,
     GoogleLoginSerializer,
+    PasswordResetSerializer,
+    PasswordResetResponseSerializer,
 )
 from users.services import (
     register_email_password_user,
+    reset_user_password,
     verify_google_id_token,
     register_google_user,
     login_google_user,
@@ -96,6 +100,33 @@ class LoginView(APIView):
 
         out = LoginResponseSerializer(user)
         return Response(out.data, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class PasswordResetView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    @extend_schema(
+        request=PasswordResetSerializer,
+        responses={200: PasswordResetResponseSerializer},
+        summary="reset password",
+        description="Set a new password for an existing email account.",
+    )
+    def post(self, request, *args, **kwargs):
+        serializer = PasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            user = reset_user_password(email=data["email"], password=data["password"])
+        except User.DoesNotExist:
+            raise ValidationError({"email": ["No account found with this email address."]}) from None
+        except ValueError as exc:
+            raise PermissionDenied(detail=str(exc)) from exc
+        return Response(
+            {"detail": "Password updated successfully.", "email": user.email},
+            status=status.HTTP_200_OK,
+        )
 
 
 @method_decorator(csrf_exempt, name="dispatch")

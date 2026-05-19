@@ -105,6 +105,17 @@ def _apply_email_verified_from_google(user: User, *, email_verified: bool) -> No
 
 
 @transaction.atomic
+def reset_user_password(*, email: str, password: str) -> User:
+    email_norm = normalize_email(email)
+    user = User.objects.get(email_normalized=email_norm)
+    if user.status == UserStatus.SUSPENDED:
+        raise ValueError("This account has been suspended.")
+    user.set_password(password)
+    user.save(update_fields=["password", "updated_at"])
+    return user
+
+
+@transaction.atomic
 def register_email_password_user(
     *,
     email: str,

@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/hooks/useToast';
+import Toast from '@/components/Toast';
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -9,25 +11,14 @@ export default function ForgotPasswordPage() {
   const [isSending, setIsSending] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [countdown, setCountdown] = useState(3);
-  const [toast, setToast] = useState({ show: false, message: '', isError: false });
+  const { toast, showMessage } = useToast();
   
-  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const showMessage = (message: string, isError: boolean = false) => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-    setToast({ show: true, message, isError });
-    toastTimeoutRef.current = setTimeout(() => {
-      setToast({ show: false, message: '', isError: false });
-    }, 2600);
-  };
 
   useEffect(() => {
     return () => {
-      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
       if (redirectTimeoutRef.current) clearTimeout(redirectTimeoutRef.current);
     };
@@ -146,7 +137,7 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-amber-100 to-amber-300 relative">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_40%,rgba(255,220,120,0.3)_1.2%,transparent_1.8%),radial-gradient(circle_at_70%_85%,rgba(247,190,70,0.25)_1%,transparent_1.5%)] bg-[length:48px_48px,64px_64px] pointer-events-none" />
       
-      <div className="relative z-10 w-full max-w-md bg-white rounded-[36px] shadow-2xl overflow-hidden transition-all duration-200 hover:-translate-y-1">
+      <div className="relative z-10 w-full max-w-md bg-white rounded-[36px] shadow-2xl overflow-hidden transition-all duration-200">
         <div className="h-2 bg-gradient-to-r from-amber-500 via-amber-300 to-amber-500" />
         
         <div className="p-8 pb-10 sm:p-7 sm:pb-9">
@@ -216,17 +207,7 @@ export default function ForgotPasswordPage() {
         </div>
       </div>
 
-      <div
-        className={`fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-2.5 rounded-full font-semibold text-sm z-50 transition-all duration-200 pointer-events-none whitespace-nowrap max-w-[85%] text-center ${
-          toast.show ? 'opacity-100 scale-100' : 'opacity-0 scale-90'
-        } ${
-          toast.isError
-            ? 'bg-stone-800/90 border-l-4 border-orange-500 text-amber-200'
-            : 'bg-stone-800/90 border-l-4 border-amber-400 text-amber-200'
-        }`}
-      >
-        {toast.message}
-      </div>
+      <Toast show={toast.show} message={toast.message} isError={toast.isError} />
     </div>
   );
 }

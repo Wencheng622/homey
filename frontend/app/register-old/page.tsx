@@ -6,6 +6,6 @@ export const metadata: Metadata = {
   description: 'Join Home In to find your perfect rental property',
 };
 
-export default function RegisterPage() {
+export default async function RegisterPage() {
   return <RegisterForm />;
 }

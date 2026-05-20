@@ -1,0 +1,429 @@
+---
+description: Frontend standards for Homey (Next.js / React / TypeScript / Zustand / Tailwind).
+globs: frontend/**/*.ts, frontend/**/*.tsx
+alwaysApply: false
+---
+
+---
+
+# Homey frontend standards
+
+## Core philosophy
+
+Homey frontend should feel:
+
+- Warm
+- Minimal
+- Trustworthy
+- International-student friendly
+- Clean and modern
+- Calm and welcoming
+
+Avoid:
+
+- Corporate banking style
+- Overly playful cartoon UI
+- Over-designed flashy animations
+- Heavy visual clutter
+
+---
+
+# Design system
+
+## Theme source of truth
+
+- Follow the global theme defined in:
+  - `frontend/app/globals.css`
+  - `frontend/tailwind.config.ts`
+
+- Use semantic Tailwind tokens instead of hardcoded colors.
+
+## UI style rules
+
+- Use soft shadows.
+- Prefer rounded-2xl cards and inputs.
+- Use generous whitespace and spacing.
+- Avoid sharp corners unless intentionally minimal.
+- Keep layouts visually calm and breathable.
+- Prefer subtle hover effects.
+- Avoid excessive gradients or neon colors.
+
+## Typography
+
+- Prioritize readability.
+- Use clear font hierarchy.
+- Keep headings visually strong but not oversized.
+- Avoid dense text blocks.
+
+---
+
+# Responsive design
+
+## Mobile-first required
+
+All pages must be mobile-first responsive.
+
+Use responsive Tailwind patterns:
+
+```tsx
+sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3
+```
+
+## Layout rules
+
+- Cards stack vertically on mobile.
+- Avoid fixed widths that break small screens.
+- Use max-width containers.
+- Use consistent horizontal padding.
+
+Preferred layout pattern:
+
+```tsx
+<div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+```
+
+## Navigation
+
+- Desktop navbar may collapse into mobile menu.
+- Avoid overcrowded navigation.
+- Mobile interactions should remain simple and touch-friendly.
+
+---
+
+# Components
+
+## Keep components small and composable
+
+Avoid large components.
+
+If a component grows past ~200–300 lines:
+
+- Extract presentational UI
+- Extract hooks
+- Extract reusable logic
+- Split feature sections
+
+## Pages are composition only
+
+`frontend/src/app/**/page.tsx` should mainly:
+
+- Read route params
+- Fetch data
+- Call hooks/stores
+- Compose feature components
+- Handle route-level loading/error states
+
+Avoid large business logic inside pages.
+
+## Component structure
+
+Reusable UI:
+
+```txt
+frontend/src/components/ui/*
+frontend/src/components/common/*
+```
+
+Feature-specific UI:
+
+```txt
+frontend/src/components/<feature>/*
+```
+
+Layout primitives:
+
+```txt
+frontend/src/components/layout/*
+```
+
+Examples:
+
+```txt
+Navbar
+Sidebar
+PageContainer
+DashboardLayout
+```
+
+---
+
+# Data access
+
+## API calls
+
+All HTTP calls must live in:
+
+```txt
+frontend/src/lib/api/*
+```
+
+Do not call axios/fetch directly inside components or pages.
+
+Bad:
+
+```tsx
+const res = await axios.get(...)
+```
+
+Good:
+
+```tsx
+const listings = await getListings();
+```
+
+## Types
+
+All API functions should return typed results.
+
+Shared types belong in:
+
+```txt
+frontend/src/types/*
+```
+
+Avoid using `any`.
+
+---
+
+# Imports
+
+Prefer absolute imports using:
+
+```ts
+@/
+```
+
+Avoid deep relative imports like:
+
+```txt
+../../../../
+```
+
+---
+
+# State management
+
+## General philosophy
+
+- Prefer local state first.
+- Use Zustand only when state is shared across multiple routes/components.
+- Avoid unnecessary global state.
+
+## Use local React state for:
+
+- Form inputs
+- Modal open/close
+- Dropdowns
+- Hover state
+- Tabs
+- Page-only filters
+- Pagination
+- Temporary UI state
+
+Example:
+
+```tsx
+const [open, setOpen] = useState(false);
+```
+
+## Use Zustand for:
+
+- Authentication state
+- Current user
+- Login status
+- Role-based UI
+- Global sidebar state
+- Global notifications
+- Cross-page favourites
+- Chat session state (future)
+- Unread counts (future)
+
+## Store organization
+
+Stores must stay domain-scoped.
+
+Good:
+
+```txt
+authStore.ts
+uiStore.ts
+favouritesStore.ts
+chatStore.ts
+```
+
+Bad:
+
+```txt
+appStore.ts containing everything
+```
+
+## Auth store rules
+
+Preferred location:
+
+```txt
+frontend/src/lib/stores/authStore.ts
+```
+
+Example state:
+
+```ts
+user: User | null;
+isAuthenticated: boolean;
+isLoading: boolean;
+
+setUser();
+clearUser();
+logout();
+```
+
+Rules:
+
+- Do not store passwords.
+- Do not store sensitive auth secrets.
+- Backend session remains the source of truth.
+- Zustand only mirrors lightweight frontend auth state.
+- Re-fetch session via `/auth/me` when needed.
+
+## Selectors
+
+Prefer selectors to reduce re-renders.
+
+Good:
+
+```ts
+const user = useAuthStore((state) => state.user);
+```
+
+Avoid:
+
+```ts
+const auth = useAuthStore();
+```
+
+unless necessary.
+
+---
+
+# Server state
+
+Zustand is NOT the backend database.
+
+Do not store:
+
+- Large datasets
+- Full listing collections
+- Entire admin dashboards
+- Massive API responses
+
+Backend APIs remain the source of truth.
+
+---
+
+# Role-based UI
+
+Frontend role checks are for UI only.
+
+Backend must still enforce permissions.
+
+Examples:
+
+- Tenant → saved listings
+- Landlord → create listing
+- Admin → moderation dashboard
+
+---
+
+# Styling
+
+## Tailwind only
+
+Use Tailwind CSS consistently.
+
+Avoid inline styles unless necessary.
+
+## Consistency
+
+Reuse spacing/layout patterns.
+
+Avoid random padding/margin values.
+
+Prefer shared UI primitives instead of duplicated layouts.
+
+---
+
+# Accessibility
+
+- Buttons must have labels.
+- Inputs must have labels.
+- Forms should show validation errors clearly.
+- Interactive elements need visible focus states.
+- Avoid relying only on color to communicate meaning.
+
+---
+
+# Animations
+
+- Keep animations subtle and purposeful.
+- Prefer simple transitions.
+- Avoid excessive motion.
+
+Good:
+
+```txt
+hover shadow
+fade in
+slide transition
+```
+
+Avoid:
+
+```txt
+heavy bouncing
+complex parallax
+aggressive motion
+```
+
+---
+
+# Quality checks
+
+Before review:
+
+```bash
+npm run lint
+npm run test
+```
+
+## Testing
+
+Add/update tests when behavior changes.
+
+Use:
+
+- Unit tests
+- Component tests
+- Storybook stories where useful
+
+---
+
+# Performance
+
+- Avoid unnecessary re-renders.
+- Lazy load heavy components when appropriate.
+- Keep client components minimal.
+- Prefer server components where possible in Next.js App Router.
+
+---
+
+# Code quality
+
+- Prefer readable code over clever code.
+- Keep files focused.
+- Avoid deeply nested JSX.
+- Prefer explicit naming.
+- Use TypeScript properly.
+
+Code should be easy for another engineer to understand quickly.
+
+---

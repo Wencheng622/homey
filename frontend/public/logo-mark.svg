@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 80" fill="none">
+
+  <!-- House body: pentagon with rounded base corners -->
+  <path
+    d="M28 26
+       L54 46
+       L54 76 C54 78.2 52.2 80 50 80
+       L6 80 C3.8 80 2 78.2 2 76
+       L2 46
+       Z"
+    fill="#E9BA20"
+  />
+
+  <!-- Arch door -->
+  <path
+    d="M21 80 L21 66 Q21 59 28 59 Q35 59 35 66 L35 80 Z"
+    fill="#2B1F12"
+    fill-opacity="0.18"
+  />
+
+  <!-- Honey drop at roof peak — round body above, pointed tip drips into peak -->
+  <path
+    d="M28 26 C20 20 20 6 28 2 C36 6 36 20 28 26 Z"
+    fill="#FAF8F5"
+  />
+
+</svg>
